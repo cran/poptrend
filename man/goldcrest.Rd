@@ -4,7 +4,8 @@
 \name{goldcrest}
 \alias{goldcrest}
 \title{Data for goldcrest from the Swedish Bird Survey.}
-\format{A data frame with 5728 rows and 9 columns.
+\format{
+A data frame with 5728 rows and 9 columns.
 \itemize{
   \item count Total transect count.
   \item site Site identity.
@@ -16,7 +17,8 @@
         by the observer in that year, and 0 otherwise.
   \item latitude Latitude of the transect.
   \item lineCov The percentage of the transect that was surveyed.
-}}
+}
+}
 \source{
 \url{http://www.fageltaxering.lu.se/english}
 }
@@ -27,4 +29,3 @@ goldcrest
 Transect count survey data for goldcrest from the Swedish Bird Survey from 1998 to 2012.
 }
 \keyword{datasets}
-

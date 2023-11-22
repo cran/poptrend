@@ -28,6 +28,8 @@
 ##'                 covariance matrix of the parameters (see \code{\link[mgcv]{vcov.gam}}).
 ##' @param gamModel If true, the fit of the underlying gam model is saved in the output. May be set to FALSE to save memory,
 ##'                 but with the side effect that the fit of the gam model cannot be checked.
+##' @param engine   If 'gam', the default, model fitting is done via \code{\link[mgcv]{gam}}. If 'bam', model fitting is done via 
+##'                 \code{\link[mgcv]{bam}}, which is less memory hungry and can be faster for large data sets.          
 ##' @param ... Further arguments passed to \code{\link[mgcv]{gam}}.
 ##' @return An object of class trend.
 ##' @examples
@@ -60,7 +62,8 @@
 ##' summary(trInd)
 ##' @export
 ##' @author Jonas Knape
-ptrend = function(formula, data = list(), family = quasipoisson(), nGrid = 500, nBoot = 500, bootType = "hessian", gamModel = TRUE, ...) {
+ptrend = function(formula, data = list(), family = quasipoisson(), nGrid = 500, nBoot = 500, bootType = "hessian", gamModel = TRUE, engine = 'gam', ...) {
+  engine = match.arg(engine, c('gam', 'bam'))
   call = match.call()
   if (!inherits(formula, "formula"))
     stop("Argument formula needs to be an object of class formula.")
@@ -76,7 +79,7 @@ ptrend = function(formula, data = list(), family = quasipoisson(), nGrid = 500, 
   tf = interpret.trendF(formula)
   timeVar = deparse(tf$tVar, width.cutoff = 500)
   if (!identical(timeVar, tf$predName)) {
-    stop(paste("Trend variable", timeVar, "must simple, expressions are not implemented."))
+    stop(paste("Trend variable", timeVar, "must be simple, expressions are not implemented."))
   }
 #  tPoints = unique(eval(as.name(tf$predName), data, environment(formula)))
   tPoints = unique(eval(tf$tVar, data, environment(formula)))
@@ -112,8 +115,11 @@ ptrend = function(formula, data = list(), family = quasipoisson(), nGrid = 500, 
   trendFrame$isGridP = c(rep(FALSE, length(tPoints)), rep(TRUE, nGrid[1]))[ix]
   trendFrame[[deparse(tf$tVar)]] = eval(tf$tVar, trendFrame)
   
-  gamFit = mgcv::gam(formula = tf$formula, data = data, family = family, ...) 
-  
+  if (engine == 'gam') {
+    gamFit = mgcv::gam(formula = tf$formula, data = data, family = family, ...) 
+  } else { 
+    gamFit = mgcv::bam(formula = tf$formula, data = data, family = family, ...) 
+  }
   if (tf$tempRE | tf$type == "index") {
     tLevs =  levels(model.frame(gamFit)[[timeVarFac]])
     trendFrame[[timeVarFac]] = factor(sapply(trendFrame[[timeVar]], 
@@ -126,9 +132,9 @@ ptrend = function(formula, data = list(), family = quasipoisson(), nGrid = 500, 
   
   for (i in seqP(1, ncol(mf))) {
     cname = colnames(mf)[i]
-    if(is.numeric(mf[[cname]]))
+    if(is.numeric(mf[[cname]])) {
       trendFrame[[cname]] = mean(mf[[i]], na.rm = TRUE) # dfhead[, i][1]
-    else {
+    } else {
       #browser()
       trendFrame[[cname]] = mf[[i]][which(!is.na(mf[[i]]))[1]]
     }
@@ -241,12 +247,13 @@ trend = function(var, tempRE = FALSE, type = "smooth", by = NA, k = -1, fx = FAL
     #tVar = substitute(factor(tVar)) 
     gTrend = ""
   }
-  if (tempRE)
+  if (tempRE) {
     gFac = paste0("s(", all.vars(tVar), .tVarExt, ", bs = \"re\")")
-  else if (type == "index")
+  } else if (type == "index") {
     gFac =paste0(all.vars(tVar), .tVarExt)
-  else
+  } else {
     gFac = ""
+  }
   list(gTrend = gTrend, gFac = gFac, 
        tVar =  tVar, predName = all.vars(tVar), 
        k = k, fx = fx, tempRE = tempRE, type = type, tVarExt = .tVarExt)
@@ -325,9 +332,14 @@ hessBootstrap = function(trend, nBoot = 500) {
   bdt = NULL
   bdtFac = NULL
   cfn = cf + chvc %*% matrix(rnorm(length(cf) * nBoot), ncol = nBoot, nrow = length(cf))
-  if (trend$trendType != "index")
+  if (trend$trendType != "index") {
     bdt = cbind(bdt, exp(X[, seqP(1,length(tCol)), drop = FALSE] %*% cfn[seqP(1, length(tCol)), , drop = FALSE]))
-  if (trend$timeRE | trend$trendType == "index") {
+  }  else { # Standardize each simulation to avoid numerical problems. Could also be done for non-index trends. TODO.
+    XC = X[, seqP(length(tCol) + 1, length(tCol) + length(tFacCol)), drop = FALSE] %*% 
+      cfn[seqP(length(tCol) + 1, length(tCol) + length(tFacCol)), , drop = FALSE]
+    bdtFac = cbind(bdtFac, exp(XC-kronecker(rep(1,nrow(XC)), t(colSums(XC)/nrow(XC)))))
+  }
+  if (trend$timeRE) {
     bdtFac = cbind(bdtFac, exp(X[, seqP(length(tCol) + 1, length(tCol) + length(tFacCol)), drop = FALSE] %*% 
                                  cfn[seqP(length(tCol) + 1, length(tCol) + length(tFacCol)), , drop = FALSE]))
   }

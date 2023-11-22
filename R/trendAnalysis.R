@@ -54,23 +54,28 @@ simTrend = function(nyear = 30, nsite = 40, mu = 3, timeSD = 0.1, siteSD = 0.3){
 ##' @param decCol The color of regions where the first or second derivative is significantly decreasing.
 ##' @param plotGrid If true, grid lines are plotted.
 ##' @param plotLines If true, the bootstrapped trends are plotted.
+##' @param ranef String indicating whether to plot point estimates and/or confidence intervals for random effects. 
+##'              One of 'pointCI', 'point', 'CI' or 'no'.
+##' @param secDeriv If true, coloured boxes at the bottom of the plot shows segments where the second derivative of the smooth is significantly different from zero.
 ##' @param ... Further arguments passed to \code{\link[graphics]{plot.default}}.
 ##' @export
 ##' @author Jonas Knape
-plot.trend = function(x, ciBase = NULL, alpha = .05, ylab = "trend", trendCol = "black", lineCol = adjustcolor("black", alpha.f = 0.05), 
+plot.trend = function(x, ciBase = NULL, alpha = .05, ylab = "abundance index", trendCol = "black", lineCol = adjustcolor("black", alpha.f = 0.05), 
                       shadeCol = adjustcolor("#0072B2", alpha.f = 0.4), incCol = "#009E73", decCol ="#D55E00",
-                      plotGrid = TRUE, plotLines = FALSE, ...) {
+                      plotGrid = TRUE, plotLines = FALSE, ranef = 'pointCI', secDeriv = TRUE, ...) {
   timeVar = x$timeVar
   isGridP = x$trendFrame$isGridP
   tGrid = x$trendFrame[[timeVar]]
   trendEst = x$trendFrame$trend
+  ranef = match.arg(ranef, c('pointCI', 'point', 'CI', 'no'))
   if (x$trendType == "index")
     trendEst = x$trendFrame$trendResid
   if (is.null(ciBase) | is.numeric(ciBase)) {
-    if (is.null(ciBase))
+    if (is.null(ciBase)) {
       bInt = which.min(isGridP)
-    else
+    } else {
       bInt = which.min(abs(tGrid - ciBase))
+    }
     tDiv = as.numeric(trendEst[bInt])
     if (!is.null(x$bootTrend))
       bDiv = x$bootTrend[bInt, ] #sapply(trend$bootTrend, function(bt) {bt$trendFrame[bInt, "trend"]})
@@ -95,7 +100,7 @@ plot.trend = function(x, ciBase = NULL, alpha = .05, ylab = "trend", trendCol = 
     ciGrad = apply(grad, 1, quantile, probs = c(alpha / 2, 1 - alpha/2)) # Expensive
     pGradInd = which(ciGrad[1, ] > 0)
     nGradInd = which(ciGrad[2, ] < 0)
-    if (x$trendType == "smooth") {
+    if (x$trendType == "smooth" & secDeriv) {
       grad2 = getGradient(x$bootTrend[isGridP, ], order = 2) # Expensive
       ciGrad2 = apply(grad2, 1, quantile, probs = c(alpha / 2, 1 - alpha/2)) # Expensive
       pGrad2Ind = getRuns(which(ciGrad2[1, ] > 0))
@@ -113,9 +118,9 @@ plot.trend = function(x, ciBase = NULL, alpha = .05, ylab = "trend", trendCol = 
     timeVarFac = x$timeVarFac
     ind = match(unique(x$trendFrame[[timeVarFac]]), x$trendFrame[[timeVarFac]])
     resGrid = as.numeric(levels(x$trendFrame[[timeVarFac]][ind]))
-    if (!is.null(x$bootTrend))
+    if (!is.null(x$bootTrend)) {
       cip = apply(x$bootTrend * x$bootResid, 1, function(row) quantile(row / bDiv, probs = c(alpha/2, 1-alpha/2), type = 1)) # Expensive
-    else if (!is.null(x$bootResid))
+    } else if (!is.null(x$bootResid) & (grepl('CI', ranef) | !x$timeRE))
       cip = apply(x$bootResid, 1, function(row) quantile(row / bDiv, probs = c(alpha/2, 1-alpha/2), type = 1)) # Expensive
   }   
   ## Start plotting
@@ -161,21 +166,26 @@ plot.trend = function(x, ciBase = NULL, alpha = .05, ylab = "trend", trendCol = 
     if(!is.null(x$bootResid)) {
       if (plotLines) {
         for (i in 1:ncol(x$bootResid)) {
-          if (x$timeRE)
+          if (x$timeRE) {
             points(resGrid, x$bootTrend[ind,i]*x$bootResid[ind, i] / bDiv[i], type = "p", pch = 20,cex = .5,
                    col = lineCol)
-          else
+          } else {
             points(resGrid, x$bootResid[ind, i] / bDiv[i], type = "p", pch = 20,cex = .5,
                    col = lineCol)
+          }
         }
       }
+      if (grepl('CI', ranef) | x$trendType == "index") { # Plot confidence intervals for random effects or index.
       apply(cbind(resGrid, t(cip[, ind])), 1, 
             function(row) lines(x = c(row[1], row[1]), y = row[2:3], lwd = 1, col = trendCol))
+      }
     }
-    if (x$timeRE)
-      points(resGrid, trendEst[ind]*x$trendFrame$trendResid[ind] / tDiv , type = "p", pch = 20, col = trendCol)
-    else
+    if (x$timeRE) {
+      if (grepl('point', ranef))
+        points(resGrid, trendEst[ind]*x$trendFrame$trendResid[ind] / tDiv , type = "p", pch = 20, col = trendCol)
+    } else {
       points(resGrid, x$trendFrame$trendResid[ind] / tDiv , type = "p", pch = 20, col = trendCol)
+    }
   }
 }
 
@@ -211,10 +221,11 @@ plot.trend = function(x, ciBase = NULL, alpha = .05, ylab = "trend", trendCol = 
 ##' change(trFit, 10, 20)
 change = function(trend, start, end, alpha = .05) {
   tGrid = trend$trendFrame[[trend$timeVar]]
-  if (trend$trendType != "index")
+  if (trend$trendType != "index") {
     trendEst = trend$trendFrame$trend
-  else
+  } else {
     trendEst = trend$trendFrame$trendResid
+  }
   sInd = which.min(abs(start - tGrid))
   eInd = which.min(abs(end - tGrid))
   percChange = function(tr) 100 * (tr[eInd] - tr[sInd]) / tr[sInd]
@@ -225,19 +236,32 @@ change = function(trend, start, end, alpha = .05) {
   } else if (trend$trendType == "index" & !is.null(trend$bootResid)) {
     bootpc = apply(trend$bootResid, 2, percChange)
     CI = quantile(bootpc, probs = c(alpha/2, 1 - alpha/2))
-  } else
+  } else {
     CI = NULL
+  }
   cat("Estimated percent change from ", trend$timeVar, " = ",  tGrid[sInd], " to ", tGrid[eInd], ": ", format(pc, digits = 2), "% ", 
       ifelse(is.null(CI), "", paste0("(", format(CI[1], digits = 2),"%, ", format(CI[2], digits =2), "%)")), "\n",sep = "")
   
-  invisible(list(percentChange = pc, CI = CI, start = start, end = end))
+  invisible(list(percentChange = pc, CI = CI, start = tGrid[sInd], end = tGrid[eInd]))
 }
 
+# Only computes relative magnitude of derivative and assumes regular grid (no 1/h, 1/h^2)
 getGradient = function(bootTrend, order = 1) {
-  if (order == 1)
-    return(apply(bootTrend, 2, function(bt) {diff(bt, lag = 2) / 2}))
-  if (order == 2)
-    return(apply(bootTrend, 2, function(bt) {diff(bt, differences = 2)}))
+  nr = nrow(bootTrend)
+  if (order == 1) {
+    #grad = apply(bootTrend, 2, function(bt) {diff(bt, lag = 2) / 2})
+    #grad = rbind(bootTrend[2,]-bootTrend[1,],grad, bootTrend[nrow(bootTrend),]-bootTrend[nrow(bootTrend)-1,])
+    # Below is faster
+    grad =  (bootTrend[3:nr,] - bootTrend[1:(nr-2),])/2
+    grad = rbind(bootTrend[2,]-bootTrend[1,],grad, bootTrend[nr,]-bootTrend[nr-1,])
+    return(grad)
+  }
+  if (order == 2) {
+    secDeriv = (bootTrend[3:nr,] - 2 *bootTrend[2:(nr-1),] + bootTrend[1:(nr-2),])
+    secDeriv = rbind(bootTrend[3,]-2*bootTrend[2,] + bootTrend[1,], secDeriv, bootTrend[nr,]-2*bootTrend[nr-1,] + bootTrend[nr-2,])
+    #apply(bootTrend, 2, function(bt) {diff(bt, differences = 2)})
+    return(secDeriv)
+  }
 }
 
 getRuns = function(index) {
@@ -294,15 +318,17 @@ summary.trend = function(object, ciBase = NULL, alpha = 0.05, ...) {
   isTP = which(!object$trendFrame$isGridP)
   timeVar = object$timeVar
   tGrid = object$trendFrame[[timeVar]]
-  if (object$trendType != "index")
+  if (object$trendType != "index") {
     trendEst = object$trendFrame$trend
-  else
+  } else {
     trendEst = object$trendFrame$trendResid
+  }
   if (is.null(ciBase) | is.numeric(ciBase)) {
-    if (is.null(ciBase))
+    if (is.null(ciBase)) {
       bInt = isTP[1]
-    else
+    } else {
       bInt = which.min(abs(tGrid - ciBase))
+    }
     tDiv = as.numeric(trendEst[bInt])
     if (!is.null(object$bootTrend))
       bDiv = object$bootTrend[bInt, ] #sapply(trend$bootTrend, function(bt) {bt$trendFrame[bInt, "trend"]})
@@ -354,10 +380,11 @@ print.summary.trend = function(x, ..., digits = 2) {
   print(x$formula)
   cat("Trend type: ", x$trendType)
   cat("\n\n")
-  if (x$trendType != "index")
+  if (x$trendType != "index") {
     cat("Trend estimates:\n\n")
-  else
+  } else {
     cat("Index estimates:\n\n")
+  }
   print(x$estimates, ..., digits = digits, row.names = FALSE)
   invisible(x)
 }

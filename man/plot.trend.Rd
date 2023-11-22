@@ -4,10 +4,22 @@
 \alias{plot.trend}
 \title{Plot an estimated trend.}
 \usage{
-\method{plot}{trend}(x, ciBase = NULL, alpha = 0.05, ylab = "trend",
-  trendCol = "black", lineCol = adjustcolor("black", alpha.f = 0.05),
-  shadeCol = adjustcolor("#0072B2", alpha.f = 0.4), incCol = "#009E73",
-  decCol = "#D55E00", plotGrid = TRUE, plotLines = FALSE, ...)
+\method{plot}{trend}(
+  x,
+  ciBase = NULL,
+  alpha = 0.05,
+  ylab = "abundance index",
+  trendCol = "black",
+  lineCol = adjustcolor("black", alpha.f = 0.05),
+  shadeCol = adjustcolor("#0072B2", alpha.f = 0.4),
+  incCol = "#009E73",
+  decCol = "#D55E00",
+  plotGrid = TRUE,
+  plotLines = FALSE,
+  ranef = "pointCI",
+  secDeriv = TRUE,
+  ...
+)
 }
 \arguments{
 \item{x}{A fitted object of class trend.}
@@ -36,6 +48,11 @@ By default, the first time point is taken as the reference.}
 
 \item{plotLines}{If true, the bootstrapped trends are plotted.}
 
+\item{ranef}{String indicating whether to plot point estimates and/or confidence intervals for random effects. 
+One of 'pointCI', 'point', 'CI' or 'no'.}
+
+\item{secDeriv}{If true, coloured boxes at the bottom of the plot shows segments where the second derivative of the smooth is significantly different from zero.}
+
 \item{...}{Further arguments passed to \code{\link[graphics]{plot.default}}.}
 }
 \description{
@@ -49,11 +66,11 @@ By default, the first observed time point is used as the reference value.
 If the estimated trend contains bootstrap samples, confidence intervals are plotted as well.
 For smooth trend models, time periods where the trend is significantly declining or increasing are marked with
 a different color (set by arguments \var{decCol} and \var{incCol}). Periods where the second derivative is 
-significantly positive or negative are marked by coloured boxes at the bottom of the plot.
+significantly positive or negative are marked by coloured boxes at the bottom of the plot. 
+
 
 There is an additional option of plotting each of the bootstrapped trends.
 }
 \author{
 Jonas Knape
 }
-
